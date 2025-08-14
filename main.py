@@ -20,26 +20,42 @@ async def film_handler(message: types.Message):
         return
 
     film_name = parts[1]
-    url = f'https://api.themoviedb.org/3/search/movie?api_key={TMDB_api}&query={film_name}&language=uk-UA'
+    search_url = f'https://api.themoviedb.org/3/search/movie?api_key={TMDB_api}&query={film_name}&language=uk-UA'
     
     try:
-        response = requests.get(url).json()
+        search_response = requests.get(search_url).json()
     except Exception as e:
         await message.answer(f"Помилка при з'єднанні з TMDB: {e}")
         return
 
-    if response.get('results'):
-        movie = response["results"][0]
+    if search_response.get('results'):
+        movie = search_response["results"][0]
+        movie_id = movie["id"]
         title = movie.get('title','-')
         year = movie.get("release_date", "—")[:4]
         overview  = movie.get('overview','-')
         poster_path = movie.get('poster_path')
 
+        # --- Додатковий запит для деталей і акторів ---
+        details_url = f'https://api.themoviedb.org/3/movie/{movie_id}?api_key={TMDB_api}&language=uk-UA&append_to_response=credits'
+        try:
+            details = requests.get(details_url).json()
+        except Exception as e:
+            await message.answer(f"Помилка при отриманні деталей фільму: {e}")
+            return
+
+        rating = details.get("vote_average", "-")
+        cast_list = details.get("credits", {}).get("cast", [])
+        actors = ", ".join([actor["name"] for actor in cast_list[:5]]) if cast_list else "-"
+
+        # --- Формування повідомлення ---
+        caption = f"🎬 {title} ({year})\nРейтинг: {rating}/10\nАктори: {actors}\n\n{overview}"
+
         if poster_path:
-            poster_url = f"https://image.tmdb.org/t/p/w500/{poster_path}"
-            await message.answer_photo(poster_url, caption=f'{title} ({year})\n\n{overview}')
+            poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}"
+            await message.answer_photo(poster_url, caption=caption)
         else:
-            await message.answer(f"🎬 {title} ({year})\n\n{overview}")
+            await message.answer(caption)
     else:
         await message.answer('Не знайшов такий фільм 😔')
 
